@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<head>
+<meta charset="utf-8">
+<title>Graph Explorer | Harvard Geospatial Library</title>
+<style>
+body {
+  margin: 0;
+  padding: 0;
+  background: #fff;
+  font-family: sans-serif;
+}
+.links line {
+  stroke: #000;
+  stroke-opacity: 0.4;
+}
+
+.nodes circle {
+  stroke: #666;
+  stroke-width: 0;
+  cursor: pointer;
+}
+.hover-tip {
+  background: rgba(255,255,255,0.8);
+  position: fixed;
+  left: 30px;
+  bottom: 30px;
+  color: #000;
+  font-size: 18px;
+  z-index: 100;
+  padding: 10px;
+}
+h1 {
+  position: fixed;
+  left: 30px;
+  top: 30px;
+  margin-top: 0;
+  color: #000;
+}
+#search {
+  position: fixed;
+  right: 30px;
+  top: 30px;
+  border: 1px solid #ccc;
+  padding: 10px;
+  font-size: 14px;
+  color: #000;
+}
+#search-btn {
+  position: fixed;
+  right: 30px;
+  top: 30px;
+  border: 1px solid #ccc;
+  height: 39px;
+  width: 40px;
+  cursor: pointer;
+}
+.legend {
+  right: 30px;
+  bottom: 30px;
+  position: fixed;
+  text-align: right;
+  background: rgba(255,255,255,0.8);
+  z-index: 100;
+  padding: 10px;
+}
+</style>
+</head>
+<body>
+<h1>Enter a search term...</h1>
+<div class="hover-tip"></div>
+<form>
+<input id="search" placeholder="Search..." type="text" />
+<input type="submit" value="Go" id="search-btn" />
+</form>
+<div class="legend"></div>
+
+<svg id="viz" width="600" height="600"></svg>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/underscore.js/1.8.3/underscore-min.js"></script>
+<script src="https://d3js.org/d3.v4.min.js"></script>
+<script>
+
+
+$(document).ready(function() {
+var graph = {}
+$('#viz').attr('width', $(window).width())
+$('#viz').attr('height', $(window).height())
+
+
+$('#search').on('mousedown', function(e) {
+  $(this).val('')
+  $('h1').html('Enter a search term...')
+})
+
+$('#search-btn').on('click', function(e) {
+  e.preventDefault()
+  var query = $('#search').val()
+  console.log(query)
+  queryData(query)
+})
+
+$(window).resize(function() {
+  $('#viz').attr('width', $(window).width())
+  $('#viz').attr('height', $(window).height())
+})
+
+function queryData(search) {
+  $('#viz').empty()
+  $('h1').html(search)
+  var query = 'https://0iu41lju7f.execute-api.us-east-1.amazonaws.com/dev?q=' + search + '%20bibframe%20instance&size=1000'
+
+  graph = {
+    nodes:  [],
+    links: []
+  }
+
+  $.getJSON(query, function( data ) {
+     console.log(data)
+
+     $('.legend').html('<b>' + data.hits.found + '</b> results found.')
+     if (data.hits.found > 1000) {
+       $('.legend').append(' Showing first 1000.')
+     }
+
+     _.each(data.hits.hit, function(item, i) {
+       if (item.fields.type[0] === 'http://id.loc.gov/ontologies/bibframe/Instance') {
+        graph.nodes.push({
+          id: item.id,
+          type: 'Instance',
+          label: item.fields.label[0],
+          group: 1
+        })
+      }
+      if (item.fields.type[0] === 'http://id.loc.gov/ontologies/bibframe/Instance'
+        && item.fields.title[0]
+      ) {
+       graph.nodes.push({
+         id: item.fields.title[0],
+         type: 'Title',
+         label: item.fields.label[0],
+         group: 2
+       })
+     }
+     if (item.fields.type[0] === 'http://id.loc.gov/ontologies/bibframe/Instance'
+       && item.fields.hasitem[0]
+     ) {
+      graph.nodes.push({
+        id: item.fields.hasitem[0],
+        type: 'Item',
+        label: item.fields.label[0],
+        group: 2
+      })
+    }
+    if (item.fields.type[0] === 'http://id.loc.gov/ontologies/bibframe/Instance'
+      && item.fields.hasactivity
+    ) {
+     graph.nodes.push({
+       id: item.fields.hasactivity[0],
+       type: 'Activity',
+       label: item.fields.hasactivity[0],
+       group: 2
+     })
+   }
+     })
+
+     graph.nodes.push({
+       id: 'query',
+       type: 'Query',
+       label: search,
+       group: 0
+     })
+
+    _.each(data.hits.hit, function(item, i) {
+      if (item.fields.type[0] === 'http://id.loc.gov/ontologies/bibframe/Instance') {
+       graph.links.push({
+         source: item.id,
+         target: 'query',
+         value: 1
+       })
+     }
+     if (item.fields.type[0] === 'http://id.loc.gov/ontologies/bibframe/Instance'
+       && item.fields.title[0]
+     ) {
+       graph.links.push({
+         source: item.id,
+         target: item.fields.title[0],
+         value: 1
+       })
+    }
+    if (item.fields.type[0] === 'http://id.loc.gov/ontologies/bibframe/Instance'
+      && item.fields.hasitem[0]
+    ) {
+     graph.links.push({
+       source: item.id,
+       target: item.fields.hasitem[0],
+       value: 1
+     })
+   }
+   if (item.fields.type[0] === 'http://id.loc.gov/ontologies/bibframe/Instance'
+     && item.fields.hasactivity
+   ) {
+    graph.links.push({
+      source: item.id,
+      target: item.fields.hasactivity[0],
+      value: 1
+    })
+  }
+   })
+
+      console.log(graph)
+       drawGraph()
+
+  })
+
+}
+
+
+var types = {
+  0: { fill: '#ccc', r: 10 },
+  1: { fill: '#000', r: 4 },
+  2: { fill: '#ccc', r: 4 },
+  3: { fill: '#ccc', r: 8 }
+}
+
+function drawGraph() {
+
+var svg = d3.select("svg"),
+    width = +svg.attr("width"),
+    height = +svg.attr("height");
+
+var color = d3.scaleOrdinal(d3.schemeCategory20);
+
+var simulation = d3.forceSimulation()
+    .force("link", d3.forceLink().id(function(d) { return d.id; }))
+    .force("charge", d3.forceManyBody())
+    .force("center", d3.forceCenter(width / 2, height / 2));
+
+
+
+  var link = svg.append("g")
+      .attr("class", "links")
+    .selectAll("line")
+    .data(graph.links)
+    .enter().append("line")
+      .attr("stroke-width", function(d) { return Math.sqrt(d.value); });
+
+  var node = svg.append("g")
+      .attr("class", "nodes")
+    .selectAll("circle")
+    .data(graph.nodes)
+    .enter().append("circle")
+      .attr("r", function(d) {
+        return types[d.group].r
+      })
+      .attr("fill", function(d) {
+        //console.log(d)
+        return types[d.group].fill
+      })
+      .call(d3.drag()
+          .on("start", dragstarted)
+          .on("drag", dragged)
+          .on("end", dragended));
+
+      node.append("title")
+      .text(function(d) { return d.id; });
+
+      node.append("text")
+           .attr("dy", -3)
+           .style("fill", "#fff")
+           .text(function (d) {
+             return d.id
+           });
+
+      node.on("mouseover", function(d) {
+        if (d.type && d.label) {
+          $('.hover-tip').html('<b>' + d.type + '</b><br/>' + d.label)
+        }
+      })
+
+
+  simulation
+      .nodes(graph.nodes)
+      .on("tick", ticked);
+
+  simulation.force("link")
+      .links(graph.links);
+
+  function ticked() {
+    link
+        .attr("x1", function(d) { return d.source.x; })
+        .attr("y1", function(d) { return d.source.y; })
+        .attr("x2", function(d) { return d.target.x; })
+        .attr("y2", function(d) { return d.target.y; });
+
+    node
+        .attr("cx", function(d) { return d.x; })
+        .attr("cy", function(d) { return d.y; });
+  }
+
+
+function dragstarted(d) {
+  if (!d3.event.active) simulation.alphaTarget(0.3).restart();
+  d.fx = d.x;
+  d.fy = d.y;
+}
+
+function dragged(d) {
+  d.fx = d3.event.x;
+  d.fy = d3.event.y;
+}
+
+function dragended(d) {
+  if (!d3.event.active) simulation.alphaTarget(0);
+  d.fx = null;
+  d.fy = null;
+}
+
+}
+
+
+queryData()
+
+})
+
+
+</script>
+</body>
+</html>
